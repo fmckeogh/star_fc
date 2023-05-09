@@ -3,10 +3,12 @@
 
 use {defmt::error, defmt_rtt as _};
 
+pub mod gps;
+
 #[rtic::app(device = feather_m0::pac, peripherals = true, dispatchers = [EVSYS])]
 mod app {
     use {
-        defmt::info,
+        defmt::{info, trace},
         feather_m0::{
             hal::{
                 clock::{ClockGenId, ClockSource, GenericClockController},
@@ -69,7 +71,7 @@ mod app {
         let sercom3_clock = &clocks.sercom3_core(&gclk0).unwrap();
         let (sda, scl) = (pins.sda, pins.scl);
         let pads = i2c::Pads::new(sda, scl);
-        let i2c = i2c::Config::new(
+        let mut i2c = i2c::Config::new(
             &peripherals.PM,
             peripherals.SERCOM3,
             pads,
@@ -77,6 +79,12 @@ mod app {
         )
         .baud(100.khz())
         .enable();
+
+        for addr in 0..128 {
+            if i2c.write(addr, &[]).is_ok() {
+                trace!("found device at {:X}", addr);
+            }
+        }
 
         let mut mpu = Mpu6050::new(i2c);
         mpu.init(&mut Delay::new(core.SYST, &mut clocks)).unwrap();
@@ -94,6 +102,7 @@ mod app {
         cx.shared.red_led.lock(|led| led.toggle().ok());
     }
 }
+
 #[panic_handler]
 fn panic_handler(_: &core::panic::PanicInfo) -> ! {
     error!("panic!");
